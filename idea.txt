@@ -1,0 +1,19 @@
+create an str.py file. in this file we will impement the spatiotemporal regression algorithm. this algorithm is essentially a data transformation technique. 
+
+first of all do a sequential train-test split on both the high and low res datasets. then employ the follwoing transformation on each of sets.
+
+data transformation algorithm:
+there is a sliding spatial window of shape (wh,ww), a temporal window list having the indices of the past hours to take into account, and a stride elength s taken as input. we start a loop from the 24th element of the low res dataset(assuming diurnal variations), select out the temporal window from there, append the bias image(high res) at the end of this sequence, followed by the slicing done by the spatial window. we keep sliding the spatial window at stride length until we reach the end of the image. zero pad the low res dataset images on all sides only one layer thick. e.g. for a spatial window of shape (3,3), and a temporal window having 7 elements, the final slice would be of shape (3,3,7+1) - when flattened for the regressor it will be a 72D vector. for an image size of 48x48 and stride of 1, there will be (48-3+1)**2=2116 slices without padding, but with padding it will be 48**2=2304 - each such slice is a new datapoint for us. the zero padding is important since the with this 72D vector what we are regressing towards or predicting the value of is the central pixel of the neighborhood in the high res data. that is, while constructing this new input set, in the same loop starting from the 24th element, we also have to construct the output set. because of the padding, the central element of the first slice is actually the first pixel value of the 24th low res image; we extract the first pixel value of the 24th element of the high res dataset and set it as target to the current slice. so as we slide throught the image, we just extract the index of the central pixel of the most recent image of the slice, subtract the padding from it and use this actual pixel index to extract the corresponding pixel from the high res set. the spatiotemporal slice and the corresponding high res central pixel value form our (x,y) pairs.
+
+make the two sets into arrays, save them.
+make sure that this is done for each of the train and test set.
+
+training:
+feed each of these trainX datapoints into a regressor to regress against the trainY. give the user the choice of a regressor - linear, svm, random forests, neural network; default is linear regression. the user also can choose a loss function - mse, mae, mbe, psnr, ssim etc.; default is mse.
+
+reconstruction:
+since the datasets were split before the transformation, we have intact images in the test set. at this point we will have the model predictions yhat and the actuals y. we just reshape them into images taking one image_shape chunk at a time.
+
+run evaluation on reconstructed test set: calculate r-squared, mae, mse, rmse, mbe, psnr, ssim; 
+
+save a temporal average plot of model predictions.
