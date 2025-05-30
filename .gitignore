@@ -1,0 +1,2 @@
+# Ignore numpy binary data files
+/data/**/*.npy
