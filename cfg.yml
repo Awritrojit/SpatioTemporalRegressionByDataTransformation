@@ -1,0 +1,119 @@
+# Spatiotemporal Regression Configuration File
+# This file contains all hyperparameters and settings for the project
+
+# Experiment Configuration
+experiment:
+  name: "SpatioTemporalRegression_Baseline"
+  description: "Baseline experiment for spatiotemporal regression with data transformation"
+  seed: 42
+  verbose: true
+  save_intermediate: true
+
+# Data Generation Parameters
+data_generation:
+  # Spatial dimensions
+  height: 64
+  width: 64
+  hours: 168  # One week of hourly data
+  
+  # Urban heat island effect parameters
+  center_temp_range: [0.7, 0.9]
+  outer_temp_range: [0.2, 0.4]
+  falloff_rate: 0.05
+  
+  # Temporal pattern parameters
+  daily_peak_hour: 14
+  daily_low_hour: 4
+  seasonal_period: 8760  # Hours in a year
+  
+  # Resolution degradation parameters
+  low_res_smoothing_sigma: 3.0
+  high_res_smoothing_sigma: 0.5
+  vertical_kernel: 4
+  horizontal_kernel: 4
+  
+  # Noise parameters
+  texture_noise_std: 0.02
+  general_noise_std: 0.01
+  temporal_noise_std: 0.005
+  
+  # Data type
+  dtype: "float16"
+
+# Model Configuration
+model:
+  # Regressor type: 'linear', 'svm', 'rf', 'nn'
+  regressor: "linear"
+  
+  # Spatial window parameters
+  spatial_window_height: 5
+  spatial_window_width: 5
+  
+  # Temporal window (offsets from current time)
+  temporal_window: [-24, -12, -6, -3, -1, 0]
+  
+  # Spatial stride for patch extraction
+  stride: 1
+  
+  # Loss function: 'mse', 'mae', 'mbe', 'psnr', 'ssim'
+  loss: "mse"
+  
+  # Data processing
+  chunk_size: 48  # Process data in chunks to manage memory
+  train_test_split: 0.7  # 70% for training, 30% for testing
+  
+  # Support Vector Machine parameters
+  svm:
+    kernel: "rbf"
+    C: 1.0
+    gamma: "scale"
+  
+  # Random Forest parameters
+  random_forest:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 5
+    random_state: 42
+  
+  # Neural Network parameters
+  neural_network:
+    hidden_layers: [256, 128, 64]
+    dropout_rate: 0.2
+    learning_rate: 0.001
+    batch_size: 512
+    epochs: 100
+    device: "auto"  # 'auto', 'cuda', 'cpu'
+
+# Evaluation Configuration
+evaluation:
+  metrics: ["r2", "mae", "mse", "rmse", "mbe", "psnr", "ssim"]
+  data_range: 1.0  # For PSNR and SSIM calculations
+  plot_results: true
+
+# Visualization Configuration
+visualization:
+  figure_size: [10, 8]
+  color_map: "viridis"
+  dpi: 300
+  save_format: "png"
+
+# File Paths Configuration
+paths:
+  data_dir: "data"
+  
+  # Generated data files
+  low_res_file: "low_res_data.npy"
+  high_res_file: "high_res_data.npy"
+  bias_file: "bias.npy"
+  
+  # Transformed data files
+  train_X_file: "train_X.npy"
+  train_y_file: "train_y.npy"
+  test_X_file: "test_X.npy"
+  test_y_file: "test_y.npy"
+  
+  # Visualization files
+  low_res_temporal_avg: "low resolution_temporal_avg.png"
+  high_res_temporal_avg: "high resolution_temporal_avg.png"
+  bias_pattern_plot: "bias_pattern.png"
+  model_predictions_plot: "model_predictions_avg.png"

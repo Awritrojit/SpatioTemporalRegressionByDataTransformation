@@ -4,3 +4,4 @@ scikit-image>=0.18.0
 matplotlib>=3.3.0
 torch>=1.8.0
 typing-extensions>=3.7.4
+PyYAML>=5.4.0

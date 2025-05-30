@@ -6,6 +6,12 @@ import os
 from skimage.metrics import peak_signal_noise_ratio as psnr
 from skimage.metrics import structural_similarity as ssim
 from skimage.transform import resize
+import yaml
+
+def load_config(config_path: str = "cfg.yml") -> dict:
+    """Load configuration from YAML file"""
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
 
 def save_to_netcdf(data, filename, **coords):
     """Save data to NetCDF format using xarray and dask with efficient chunking and compression"""
@@ -52,17 +58,37 @@ def save_to_netcdf(data, filename, **coords):
     delayed_obj.compute()
 
 class SpatioTemporalDataGenerator:
-    def __init__(self):
+    def __init__(self, config: dict = None):
+        if config is None:
+            config = load_config()
+        
+        self.config = config
+        data_gen_config = config['data_generation']
+        
         # Parameters for the urban heat island effect
-        self.center_temp_range = (0.6, 0.9)  # Normalized temperature range for city center
-        self.outer_temp_range = (0.2, 0.5)   # Normalized temperature range for outskirts
-        self.falloff_rate = 1.3  # Controls how quickly temperature drops with distance (higher = faster falloff)
+        self.center_temp_range = tuple(data_gen_config['center_temp_range'])
+        self.outer_temp_range = tuple(data_gen_config['outer_temp_range'])
+        self.falloff_rate = data_gen_config['falloff_rate']
         
         # Temporal parameters
-        self.daily_peak_hour = 14  # 2 PM peak temperature
-        self.daily_low_hour = 4    # 4 AM lowest temperature
-        self.seasonal_period = 24 * 30 * 12  # Hours in a year (approximation)
+        self.daily_peak_hour = data_gen_config['daily_peak_hour']
+        self.daily_low_hour = data_gen_config['daily_low_hour']
+        self.seasonal_period = data_gen_config['seasonal_period']
         
+        # Resolution effects parameters
+        self.low_res_smoothing_sigma = data_gen_config['low_res_smoothing_sigma']
+        self.high_res_smoothing_sigma = data_gen_config['high_res_smoothing_sigma']
+        self.vertical_kernel = data_gen_config['vertical_kernel']
+        self.horizontal_kernel = data_gen_config['horizontal_kernel']
+        
+        # Noise parameters
+        self.texture_noise_std = data_gen_config['texture_noise_std']
+        self.general_noise_std = data_gen_config['general_noise_std']
+        self.temporal_noise_std = data_gen_config['temporal_noise_std']
+        
+        # Data type
+        self.dtype = data_gen_config['dtype']
+
     def _generate_base_spatial_pattern(self, h, w, falloff_rate=None):
         """
         Generate base spatial pattern with multiple urban centers and realistic heat distribution
@@ -221,56 +247,52 @@ class SpatioTemporalDataGenerator:
         if res == 'low':
             rows, cols = data.shape
             
-            # First apply strong smoothing
-            smoothed = gaussian_filter(data, sigma=5.0)  # Increased initial smoothing
+            # Apply smoothing with config parameter
+            smoothed = gaussian_filter(data, sigma=self.low_res_smoothing_sigma)
             
-            # Create rectangular degradation with more extreme aspect ratio
-            vertical_kernel = 16   # Increased from 12
-            horizontal_kernel = 8   # Decreased from 6
+            # Create rectangular degradation
+            vertical_kernel = self.vertical_kernel
+            horizontal_kernel = self.horizontal_kernel
             
             # Create initial downsampled version
             downsampled_v = np.zeros((rows//vertical_kernel, cols))
             
-            # First downsample vertically with more noise
+            # First downsample vertically with noise
             for i in range(0, rows-vertical_kernel+1, vertical_kernel):
                 for j in range(cols):
                     strip = smoothed[i:i+vertical_kernel, j]
-                    avg = np.mean(strip) + np.random.normal(0, 0.1)  # Increased noise
+                    avg = np.mean(strip) + np.random.normal(0, self.temporal_noise_std)
                     downsampled_v[i//vertical_kernel, j] = avg
             
             # Double smoothing between vertical and horizontal passes
-            upscaled_v = resize(downsampled_v, (rows, cols), order=1, mode='edge')  # Changed to edge mode
-            upscaled_v = gaussian_filter(upscaled_v, sigma=2.0)  # Added extra smoothing
+            upscaled_v = resize(downsampled_v, (rows, cols), order=1, mode='edge')
+            upscaled_v = gaussian_filter(upscaled_v, sigma=2.0)
             
-            # Now downsample horizontally with even smaller kernel
+            # Now downsample horizontally
             downsampled_h = np.zeros((rows, cols//horizontal_kernel))
             for i in range(rows):
                 for j in range(0, cols-horizontal_kernel+1, horizontal_kernel):
                     strip = upscaled_v[i, j:j+horizontal_kernel]
-                    avg = np.mean(strip) + np.random.normal(0, 0.1)  # Increased noise
+                    avg = np.mean(strip) + np.random.normal(0, self.temporal_noise_std)
                     downsampled_h[i, j//horizontal_kernel] = avg
             
-            # Upscale horizontally with more aggressive interpolation
-            degraded = resize(downsampled_h, (rows, cols), order=1, mode='edge')  # Changed to edge mode
+            # Upscale horizontally
+            degraded = resize(downsampled_h, (rows, cols), order=1, mode='edge')
+            degraded = gaussian_filter(degraded, sigma=2.0)
             
-            # Add stronger local blending
-            degraded = gaussian_filter(degraded, sigma=2.0)  # Increased final smoothing
+            # Add low frequency variations
+            low_freq = gaussian_filter(np.random.normal(0, 1, data.shape), sigma=20.0)
+            degraded += 0.2 * low_freq
             
-            # Add stronger low frequency variations
-            low_freq = gaussian_filter(np.random.normal(0, 1, data.shape), sigma=20.0)  # Increased sigma
-            degraded += 0.2 * low_freq  # Increased contribution
-            
-            # Add some additional structured noise
+            # Add structured noise
             structured_noise = gaussian_filter(np.random.normal(0, 1, data.shape), sigma=3.0)
             degraded += 0.1 * structured_noise
             
-            # Ensure values stay in [0,1] range
             degraded = np.clip(degraded, 0, 1)
-            
             return degraded
         else:
-            # For high resolution, apply minimal smoothing but preserve local variations
-            return gaussian_filter(data, sigma=0.5)
+            # For high resolution, apply minimal smoothing
+            return gaussian_filter(data, sigma=self.high_res_smoothing_sigma)
     
     def _apply_temporal_patterns(self, base_pattern, hour_idx, hr):
         """Apply daily and seasonal temporal patterns"""
@@ -349,83 +371,113 @@ class SpatioTemporalDataGenerator:
         return bias
     
     def sanity_check(self, data, title=""):
-        """
-        Perform sanity checks on the generated data
+        """Perform sanity checks on the generated data"""
+        config = self.config
+        viz_config = config['visualization']
+        paths_config = config['paths']
         
-        Parameters:
-        -----------
-        data : np.ndarray
-            The generated data of shape (hr, h, w)
-        title : str
-            Title for the plots
-        """
         # 1. Check value range
-        print(f"{title} Value range: [{data.min():.3f}, {data.max():.3f}]")
+        if config['experiment']['verbose']:
+            print(f"{title} Value range: [{data.min():.3f}, {data.max():.3f}]")
         
         # 2. Temporal average
         temporal_avg = np.mean(data, axis=0)
-        plt.figure(figsize=(10, 8))
-        plt.imshow(temporal_avg, cmap='RdYlBu_r')
+        plt.figure(figsize=viz_config['figure_size'])
+        plt.imshow(temporal_avg, cmap=viz_config['color_map'])
         plt.colorbar(label='Average Temperature')
         plt.title(f"{title} Temporal Average")
-        plt.savefig(f"data/{title.lower()}_temporal_avg.png")
+        
+        # Save with config-specified path
+        if title.lower() == "low resolution":
+            filename = paths_config['low_res_temporal_avg']
+        else:
+            filename = paths_config['high_res_temporal_avg']
+        
+        plt.savefig(f"{paths_config['data_dir']}/{filename}", 
+                   dpi=viz_config['dpi'], 
+                   format=viz_config['save_format'])
         plt.close()
         
         # 3. Check temporal correlations
-        if data.shape[0] >= 24:  # If we have at least 24 hours
-            noon_temps = data[14::24].mean(axis=(1,2))  # 2 PM temperatures
-            midnight_temps = data[2::24].mean(axis=(1,2))  # 2 AM temperatures
+        if data.shape[0] >= 24 and config['experiment']['verbose']:
+            noon_temps = data[14::24].mean(axis=(1,2))
+            midnight_temps = data[2::24].mean(axis=(1,2))
             print(f"{title} Average noon temperature: {noon_temps.mean():.3f}")
             print(f"{title} Average midnight temperature: {midnight_temps.mean():.3f}")
         
         # 4. Spatial correlation check
-        center_region = data[:, data.shape[1]//3:2*data.shape[1]//3, 
-                           data.shape[2]//3:2*data.shape[2]//3]
-        outer_region = data[:, :data.shape[1]//4, :data.shape[2]//4]
-        print(f"{title} Average center temperature: {center_region.mean():.3f}")
-        print(f"{title} Average outer region temperature: {outer_region.mean():.3f}")
+        if config['experiment']['verbose']:
+            center_region = data[:, data.shape[1]//3:2*data.shape[1]//3, 
+                               data.shape[2]//3:2*data.shape[2]//3]
+            outer_region = data[:, :data.shape[1]//4, :data.shape[2]//4]
+            print(f"{title} Average center temperature: {center_region.mean():.3f}")
+            print(f"{title} Average outer region temperature: {outer_region.mean():.3f}")
         
         # 5. PSNR between consecutive timesteps
-        psnr_values = []
-        for i in range(data.shape[0]-1):
-            psnr_val = psnr(data[i], data[i+1], data_range=1.0)
-            psnr_values.append(psnr_val)
-        print(f"{title} Average PSNR between consecutive frames: {np.mean(psnr_values):.2f}")
+        if config['experiment']['verbose']:
+            psnr_values = []
+            for i in range(data.shape[0]-1):
+                psnr_val = psnr(data[i], data[i+1], data_range=1.0)
+                psnr_values.append(psnr_val)
+            print(f"{title} Average PSNR between consecutive frames: {np.mean(psnr_values):.2f}")
 
 def main():
+    # Load configuration
+    config = load_config()
+    
+    # Set random seed for reproducibility
+    np.random.seed(config['experiment']['seed'])
+    
     # Create data directory if it doesn't exist
-    Path("data").mkdir(exist_ok=True)
+    Path(config['paths']['data_dir']).mkdir(exist_ok=True)
     
-    # Initialize generator
-    generator = SpatioTemporalDataGenerator()
+    # Initialize generator with config
+    generator = SpatioTemporalDataGenerator(config)
     
-    # Generate data for both resolutions
-    h, w = 48, 48  # Image dimensions
-    hr = 24 * 30 * 12  # 18 months of hourly data
+    # Get dimensions from config
+    data_gen_config = config['data_generation']
+    h, w = data_gen_config['height'], data_gen_config['width']
+    hr = data_gen_config['hours']
     
     # Generate and save low resolution data
-    print("Generating low resolution data...")
-    low_res_data = generator.generate(h, w, hr, 'low').astype(np.float16)
-    np.save("data/low_res_data.npy", low_res_data)
+    if config['experiment']['verbose']:
+        print("Generating low resolution data...")
+    
+    low_res_data = generator.generate(h, w, hr, 'low').astype(getattr(np, data_gen_config['dtype']))
+    
+    # Save using config paths
+    low_res_path = f"{config['paths']['data_dir']}/{config['paths']['low_res_file']}"
+    np.save(low_res_path, low_res_data)
     generator.sanity_check(low_res_data, "Low Resolution")
     
     # Generate and save high resolution data
-    print("\nGenerating high resolution data...")
-    high_res_data = generator.generate(h, w, hr, 'high').astype(np.float16)
-    np.save("data/high_res_data.npy", high_res_data)
+    if config['experiment']['verbose']:
+        print("\nGenerating high resolution data...")
+    
+    high_res_data = generator.generate(h, w, hr, 'high').astype(getattr(np, data_gen_config['dtype']))
+    
+    high_res_path = f"{config['paths']['data_dir']}/{config['paths']['high_res_file']}"
+    np.save(high_res_path, high_res_data)
     generator.sanity_check(high_res_data, "High Resolution")
     
     # Generate and save bias
-    print("\nGenerating bias pattern...")
-    bias = generator.generate_bias(h, w).astype(np.float16)
-    np.save("data/bias.npy", bias)
+    if config['experiment']['verbose']:
+        print("\nGenerating bias pattern...")
     
-    # Visualize bias
-    plt.figure(figsize=(10, 8))
+    bias = generator.generate_bias(h, w).astype(getattr(np, data_gen_config['dtype']))
+    
+    bias_path = f"{config['paths']['data_dir']}/{config['paths']['bias_file']}"
+    np.save(bias_path, bias)
+    
+    # Visualize bias with config parameters
+    viz_config = config['visualization']
+    plt.figure(figsize=viz_config['figure_size'])
     plt.imshow(bias, cmap='viridis')
     plt.colorbar(label='Bias Value')
     plt.title("Bias Pattern")
-    plt.savefig("data/bias_pattern.png")
+    
+    bias_plot_path = f"{config['paths']['data_dir']}/{config['paths']['bias_pattern_plot']}"
+    plt.savefig(bias_plot_path, dpi=viz_config['dpi'], format=viz_config['save_format'])
     plt.close()
 
 if __name__ == "__main__":
