@@ -1,6 +1,18 @@
 # Spatio-Temporal Regression by Data Transformation
 
-This project implements a spatio-temporal regression model to predict high-resolution climate data from low-resolution inputs. The core idea is to transform the data using spatio-temporal sliding windows and then apply a regression model.
+This project implements a spatio-temporal### 4. `analyze_lag_correlations.py`
+A utility for analyzing and visualizing temporal correlation patterns in the data:
+- Calculates correlation between the current time and each lag for all spatial locations
+- Computes autocorrelation function to reveal cyclical patterns
+- Generates visualizations of correlation structure including:
+  - Lag correlation bar chart showing the strength of correlation for each lag
+  - Autocorrelation function plot to identify cyclical patterns in the data
+- Samples locations to balance computational efficiency with statistical robustness
+- Saves detailed correlation statistics for further analysis
+- Identifies most correlated lags to guide temporal window selection
+- Helps in understanding the temporal dependencies in the data beyond simple intuition
+
+### 5. `data_compression.py`ion model to predict high-resolution climate data from low-resolution inputs. The core idea is to transform the data using spatio-temporal sliding windows and then apply a regression model.
 
 ## Project Structure
 
@@ -9,6 +21,8 @@ This project implements a spatio-temporal regression model to predict high-resol
 ├── cfg.yml
 ├── data_compression.py
 ├── data_transform.py
+├── temporal_window_optimizer.py
+├── analyze_lag_correlations.py
 ├── idea.txt
 ├── requirements.txt
 ├── SpatioTemporalData.py
@@ -17,13 +31,19 @@ This project implements a spatio-temporal regression model to predict high-resol
 │   ├── bias_pattern.png
 │   ├── bias.nc
 │   ├── bias.npy
+│   ├── correlation_analysis.npz
 │   ├── high resolution_temporal_avg.png
 │   ├── linear_training_history.npy
 │   ├── low resolution_temporal_avg.png
 │   ├── model_predictions_avg.png
-│   ├── train_X.npy
+│   ├── temporal_autocorrelation.png
+│   ├── temporal_dynamics.png
+│   ├── temporal_window_optimization.txt
 │   ├── high_res_data/
 │   ├── low_res_data/
+│   ├── plots/
+│   │   ├── autocorrelation.png
+│   │   └── lag_correlations.png
 │   ├── test_X/
 │   ├── test_y/
 │   ├── train_X/
@@ -63,13 +83,53 @@ This script is responsible for generating synthetic spatio-temporal data.
     - Initializes with parameters from `cfg.yml`.
     - `_generate_base_spatial_pattern()`: Creates a complex spatial pattern representing an urban environment with multiple heat centers, sub-centers, cool spots (water bodies, parks), and temperature anomalies. It incorporates fine-scale texture and noise for realism.
     - `_apply_resolution()`: Simulates low-resolution data by applying smoothing and degradation (e.g., rectangular artifacts) to the high-resolution pattern.
-    - `_apply_temporal_patterns()`: Modulates the spatial pattern over time using daily and seasonal temperature cycles.
+    - `_apply_temporal_patterns()`: Modulates the spatial pattern over time using daily and seasonal temperature cycles. Enhanced to include multiple advanced temporal effects:
+        - **Momentum/inertia effects**: Each timestep is influenced by previous hours with diminishing influence
+            - 80% from current pattern + 20% from 1 hour ago
+            - 90% from above + 10% from 6 hours ago
+            - 95% from above + 5% from 12 hours ago
+        - **Weather events**: Random localized or widespread temperature anomalies with realistic properties:
+            - Duration: 6-24 hours (randomly determined)
+            - Intensity: -0.3 to +0.3 temperature deviation
+            - Spatial coverage: Either localized or widespread
+            - Lifecycle: Gradual onset and decay
+        - **Weekly patterns**: Small periodic variations on a 7-day cycle
+            - Models human activity patterns (e.g., weekday/weekend differences)
+            - Applied with small amplitude to avoid dominating other patterns
     - `generate()`: Produces either high-resolution or low-resolution spatio-temporal data for a specified duration.
     - `generate_bias()`: Creates a static bias pattern, representing consistent spatial differences (e.g., due to sensor characteristics or fixed geographical features).
+    - `visualize_temporal_dynamics()`: Analyzes and visualizes the temporal patterns at multiple locations to verify complex temporal dependencies.
     - `sanity_check()`: Visualizes a sample of the generated data for quick verification.
 - The `main()` function in this script orchestrates the generation of low-resolution data, high-resolution data, and the bias pattern, saving them into the `data/` directory (chunked for large datasets). It also saves a visualization of the bias pattern.
 
-### 4. `data_compression.py`
+### 4. `temporal_window_optimizer.py`
+This script optimizes the temporal window (which hours in the past are most informative) for the regression model:
+- **`calc_partial_correlation()`**: Calculates the correlation between a feature and target while controlling for other variables.
+- **`calc_objective_score()`**: Calculates a comprehensive score for a given set of temporal lags:
+    - Combines mean correlation and maximum correlation (0.7/0.3 weighting)
+    - Applies diminishing returns for additional lags to encourage parsimony
+    - Balances predictive power with model complexity
+- **`optimize_temporal_window()`**:
+    - Analyzes each spatial location independently for a personalized approach
+    - Uses a robust two-stage selection process:
+        1. Forward-greedy selection to add lags that improve the score
+        2. Backward pruning to remove less informative lags
+    - Tracks the frequency of selection for each lag across all locations
+    - Selects lags that appear in at least 15% of locations
+    - Identifies a common temporal window based on lag selection frequency
+    - Enforces minimum and maximum constraints on the number of lags
+    - Updates the configuration with the optimized window
+    - Creates detailed optimization report with selection frequencies
+- The optimization process results in a more efficient and effective temporal window for the regression model, focusing on the most informative past time points.
+
+### 5. `analyze_lag_correlations.py`
+A utility for analyzing and visualizing temporal correlation patterns in the data:
+- Calculates correlation between the current time and each lag for all spatial locations
+- Computes autocorrelation function to reveal cyclical patterns
+- Generates visualizations of correlation structure
+- Helps in understanding the temporal dependencies in the data
+
+### 6. `data_compression.py`
 This utility script provides functions for handling large datasets by splitting them into smaller, more manageable chunks.
 - **`chunk_dataset()`**: Takes a large NumPy array and splits it into multiple smaller `.npy` files (chunks) based on a specified chunk size in megabytes. It saves these chunks into a specified output directory.
 - **`load_chunked_dataset()`**: Loads data that has been previously chunked by `chunk_dataset()`. It reads all chunk files from a directory, concatenates them, and returns a single NumPy array.
@@ -137,6 +197,7 @@ This directory stores all the data used and generated by the project.
 
 -  **Configuration (`cfg.yml`)**: Define all parameters for data generation, transformation, and regression.
 -  **Data Generation**: Run `SpatioTemporalData.py` to produce raw data.
+-  **Temporal Window Optimization**: Run `temporal_window_optimizer.py` to identify the most informative temporal lags.
 -  **Data Transformation**: Run `data_transform.py` to prepare training/testing sets.
 -  **Model Training and Evaluation**: Run `str.py` to train the model and evaluate results.
 
@@ -147,10 +208,14 @@ After cloning the repository and installing dependencies (`pip install -r requir
 # 1. Generate synthetic data
 python SpatioTemporalData.py
 
-# 2. Transform data for regression
+# 2. Analyze temporal correlation structure and optimize the temporal window
+python analyze_lag_correlations.py
+python temporal_window_optimizer.py
+
+# 3. Transform data for regression
 python data_transform.py
 
-# 3. Train and evaluate regressor
+# 4. Train and evaluate regressor
 python str.py
 ```
 
@@ -158,6 +223,8 @@ Alternatively, run the orchestrator script:
 ```bash
 ./orchestrator.sh
 ```
+
+The orchestrator script executes all steps in sequence with proper error handling and logging. It ensures that each step completes successfully before proceeding to the next one.
 
 Make sure to have Python 3.8+ and required packages installed as listed in `requirements.txt`.
 
@@ -169,27 +236,50 @@ For each target high-resolution pixel at a given time `t`:
 -   **Temporal Context**: Similar spatial windows are taken from the low-resolution data at several past time steps (e.g., t-1h, t-2h, t-6h, t-12h, t-24h).
 -   **Bias Information**: A corresponding spatial window from the static bias image is also included.
 
-These spatial patches from different time steps and the bias are flattened and concatenated to form a single feature vector. The regressor then learns to map these feature vectors to the single high-resolution pixel value. This process is repeated for all pixels and relevant time steps.
+## Temporal Window Optimization
 
-## Regressors
+A key innovation in this project is the data-driven optimization of the temporal window, which determines which past time points to include in the regression model. Rather than using a fixed or manually selected set of time lags, we analyze the temporal correlation structure of the data and select the most informative lags through an automated process.
 
-The project supports several regression models:
--   **Linear Regression**: A simple and fast baseline.
--   **Support Vector Regressor (SVR)**: A kernel-based method capable of capturing non-linear relationships.
--   **Random Forest Regressor**: An ensemble method that often provides good performance and robustness.
--   **Neural Network**: A multi-layer perceptron (MLP) implemented in PyTorch, allowing for more complex function approximation.
+### Approach
 
-The choice of regressor and its parameters can be configured in `cfg.yml`.
+The optimization process follows these steps:
 
-## Evaluation Metrics
+1. **Lag Correlation Analysis**: First, we analyze the correlation structure between the current time and each lag for all spatial locations using `analyze_lag_correlations.py`. This helps us understand the overall temporal dependencies in the data.
 
-The model's performance is assessed using a comprehensive set of metrics:
--   **R² (R-squared)**: Proportion of variance in the dependent variable predictable from the independent variables.
--   **MAE (Mean Absolute Error)**: Average absolute difference between predicted and actual values.
--   **MSE (Mean Squared Error)**: Average squared difference between predicted and actual values.
--   **RMSE (Root Mean Squared Error)**: Square root of MSE, in the same units as the target variable.
--   **MBE (Mean Bias Error)**: Average bias, indicating if the model tends to overpredict or underpredict.
--   **PSNR (Peak Signal-to-Noise Ratio)**: Ratio between the maximum possible power of a signal and the power of corrupting noise that affects the fidelity of its representation. Used for image quality.
--   **SSIM (Structural Similarity Index Measure)**: Measures the similarity between two images, considering luminance, contrast, and structure.
+2. **Per-Location Optimization**: Using `temporal_window_optimizer.py`, we:
+   - Process each spatial location independently to find its optimal set of temporal lags
+   - Use forward-backward selection to balance the number of lags against their predictive power
+   - Calculate an objective score that combines correlation strength and mutual information
+   - Apply diminishing returns to encourage parsimony in lag selection
 
-This detailed README should provide a good overview of the project.
+3. **Frequency-Based Selection**: After analyzing all locations:
+   - Track the frequency of each lag being selected across all locations
+   - Identify lags that appear in at least 15% of locations
+   - Form a common temporal window based on these frequently selected lags
+
+### Results
+
+Our temporal window optimization found the following lags to be most informative: `[-24, -23, -3, -2, -1]`. This window captures key temporal patterns:
+
+- **Recent history** (`-1h, -2h, -3h`): Captures short-term momentum and local weather effects
+- **Day-before information** (`-24h, -23h`): Captures daily cyclical patterns
+
+The selection frequency across all locations showed:
+
+- `-1h` lag was selected in 100% of locations, confirming the importance of the most recent time point
+- `-2h` lag was selected in 66.9% of locations
+- `-3h` lag was selected in 57.2% of locations
+- `-24h` lag was selected in 42.8% of locations
+- `-23h` lag was selected in 33.1% of locations
+
+This optimized window provides a more efficient and effective temporal context compared to arbitrary selections, focusing computational resources on the most informative time points.
+
+### Visualization
+
+Temporal correlation analysis generated the following visualizations:
+
+![Lag Correlations](data/plots/lag_correlations.png)
+*Average correlation between current time and each lag across all spatial locations. This plot helps identify which specific past hours (lags) are most informative for predicting the current value. Higher bars indicate lags with stronger predictive power. The red dashed line marks a significance threshold for correlation.*
+
+![Autocorrelation Function](data/plots/autocorrelation.png)
+*Autocorrelation function showing how similar the time series is to itself at different lags (in hours). Peaks in the blue curve indicate repeating patterns or cycles in the data. The green dotted vertical lines are placed every 24 hours to highlight daily (diurnal) cycles, making it easy to spot periodicity. The red dashed horizontal line at y=0 is a reference for zero correlation. Strong peaks at multiples of 24 hours confirm the presence of daily cycles in the data.*

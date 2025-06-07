@@ -1,0 +1,41 @@
+Temporal Window Optimization Results
+==================================
+
+Common temporal window: [-24, -23, -3, -2, -1]
+Average objective score: 0.8337
+
+Valid locations analyzed: 2304/2304 (100.0%)
+
+Lag frequencies:
+Lag -24h: 986/2304 locations (42.8%)
+Lag -23h: 763/2304 locations (33.1%)
+Lag -22h: 0/2304 locations (0.0%)
+Lag -21h: 0/2304 locations (0.0%)
+Lag -20h: 0/2304 locations (0.0%)
+Lag -19h: 0/2304 locations (0.0%)
+Lag -18h: 0/2304 locations (0.0%)
+Lag -17h: 0/2304 locations (0.0%)
+Lag -16h: 0/2304 locations (0.0%)
+Lag -15h: 0/2304 locations (0.0%)
+Lag -14h: 0/2304 locations (0.0%)
+Lag -13h: 0/2304 locations (0.0%)
+Lag -12h: 0/2304 locations (0.0%)
+Lag -11h: 0/2304 locations (0.0%)
+Lag -10h: 0/2304 locations (0.0%)
+Lag -9h: 0/2304 locations (0.0%)
+Lag -8h: 0/2304 locations (0.0%)
+Lag -7h: 0/2304 locations (0.0%)
+Lag -6h: 0/2304 locations (0.0%)
+Lag -5h: 0/2304 locations (0.0%)
+Lag -4h: 0/2304 locations (0.0%)
+Lag -3h: 1318/2304 locations (57.2%)
+Lag -2h: 1541/2304 locations (66.9%)
+Lag -1h: 2304/2304 locations (100.0%)
+
+Explanation:
+- Used modified forward-backward selection for each spatial location
+- Selected lags that appear in at least 15% of valid locations
+- Enforced minimum of 3 lags and maximum of 8 lags
+- Used correlation-based objective score with diversity incentives
+- Analyzed all spatial locations (no sampling)
+- Considered lags up to 24 hours

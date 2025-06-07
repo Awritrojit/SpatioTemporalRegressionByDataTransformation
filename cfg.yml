@@ -1,51 +1,59 @@
-# Data Generation Parameters
-data_generation:
-  image_size: [48, 48]  # [height, width]
-  hours: 8760         # 18 months of hourly data
-  falloff_rate: 1.3    # Urban heat island falloff rate
-  center_temp_range: [0.6, 0.9]
-  outer_temp_range: [0.2, 0.5]
-  daily_peak_hour: 14  # 2 PM
-  daily_low_hour: 4    # 4 AM
-
-# Data Storage and Quantization
 data:
-  directory: "data"
+  bias_pattern: bias_pattern.png
   chunk_dirs:
-    low_res: "low_res_data"
-    high_res: "high_res_data"
-    train_x: "train_X"
-    train_y: "train_y"
-    test_x: "test_X"
-    test_y: "test_y"
-  bias_pattern: "bias_pattern.png"
+    high_res: high_res_data
+    low_res: low_res_data
+    test_x: test_X
+    test_y: test_y
+    train_x: train_X
+    train_y: train_y
+  directory: data
   quantization:
+    dynamic_range: true
     enabled: true
-    precision: "fp8"  # Options: fp32, fp16, fp8
-    dynamic_range: true  # If true, automatically determine min/max for quantization
-    min_value: 0.0  # Used if dynamic_range is false
-    max_value: 1.0  # Used if dynamic_range is false
-
-# Spatiotemporal Regression Parameters
-regression:
-  spatial_window: [3, 3]  # [height, width]
-  temporal_window: [-24, -12, -6, -3, -2, -1]  # Hours to look back
-  stride: 1
-  train_size: 0.8
-  regressor_type: "linear"  # Options: linear, svm, rf, nn
-  loss_type: "mse"        # Options: mse, mae, mbe, psnr, ssim
-  batch_size: 2304         # Batch size for training = image_size ** 2
-
-# Neural Network Parameters (if using nn regressor)
+    max_value: 1.0
+    min_value: 0.0
+    precision: fp8
+data_generation:
+  center_temp_range:
+  - 0.6
+  - 0.9
+  daily_low_hour: 4
+  daily_peak_hour: 14
+  falloff_rate: 1.3
+  hours: 8760
+  image_size:
+  - 48
+  - 48
+  outer_temp_range:
+  - 0.2
+  - 0.5
 neural_network:
-  hidden_layers: [128, 64]
   dropout_rate: 0.2
-  learning_rate: 0.001
-  epochs: 100
   early_stopping_patience: 10
-
-# Visualization
+  epochs: 100
+  hidden_layers:
+  - 128
+  - 64
+  learning_rate: 0.001
+regression:
+  batch_size: 2304
+  loss_type: mse
+  regressor_type: linear
+  spatial_window:
+  - 3
+  - 3
+  stride: 1
+  temporal_window:
+  - -24
+  - -23
+  - -3
+  - -2
+  - -1
+  train_size: 0.8
 visualization:
-  figure_size: [10, 8]
-  colormap: "viridis"
+  colormap: viridis
   dpi: 100
+  figure_size:
+  - 10
+  - 8
